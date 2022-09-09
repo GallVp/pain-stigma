@@ -1,0 +1,721 @@
+---
+title: "How Does Stigma Affect People With Chronic Pain?"
+author: "Usman Rashid"
+date: "13/11/2021"
+output:
+  md_document:
+    variant: gfm
+    toc: yes
+    toc_depth: '4'
+  word_document:
+    toc: yes
+    toc_depth: '4'
+  pdf_document:
+    number_sections: yes
+    toc: yes
+    toc_depth: 4
+  html_document:
+    toc: yes
+    toc_depth: '4'
+    df_print: paged
+header-includes:
+- \usepackage{fancyhdr}
+- \pagestyle{fancy}
+bibliography: bibliography.bib
+csl: apa.csl
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+rm(list = ls())
+```
+
+```{r data_setup, echo=FALSE, include=FALSE}
+
+# Packages Used:
+require(ggplot2)
+require(lme4)
+require(car)
+require(MASS)
+require(sjstats)
+require(fBasics)
+require(ggpubr)
+require(reshape2)
+require(phia)
+require(emmeans)
+require(multcomp)
+require(jtools)
+require(rsq)
+require(r2glmm)
+require(sjPlot)
+require(MuMIn)
+require(effects)
+require(optimx)
+require(margins)
+require(cAIC4)
+require(ggsignif)
+require(forcats)
+require(gdata)
+require(splines)
+require(dplyr)
+require(ggsci)
+require(blmeco)
+require(lemon)
+require(ggExtra)
+require(report)
+require(lavaan)
+require(semPlot)
+
+knit_print.data.frame <- lemon_print
+options(knitr.kable.NA = '')
+
+source('Stats-Helpers.R')
+
+# Load data
+Datasource <- read.csv("DataTable.csv")
+Datasource$PartID <- as.factor(Datasource$PartID)
+
+Datasource$Gender <- make.factor(Datasource$Gender, levels = seq(1, 3), labels = c("Male", "Female", "Other"))
+
+Datasource$Ethnicity <- make.factor(Datasource$Ethnicity, levels = seq(1, 4), labels = c("European", "Māori", "Pacific", "Asian"))
+
+Datasource$Relationship <- make.factor(Datasource$Relationship, levels = seq(1, 6), labels = c("Single", "In a relation", "Married/De facto", "Civil union", "Divorced/sep.", "Widowed"))
+
+Datasource$Employment <- make.factor(Datasource$Employment, levels = seq(1, 6), labels = c("Employed", "Unemployed/benefit", "Work at home", "Retired", "Student", "Other"))
+
+Datasource$Diagnosis <- make.factor(Datasource$Diagnosis, levels = seq(1, 14), labels = c("Fibromyaliga", "CRPS", "Spinal pathology", "Headache/migraine", "Endometriosis", "Osteoarthritis", "Inflam/Rhe. art.", "Multiple diagnoses", "Label Missing", "Other/unknown", "Sensitization", "Mesh", "Neuropathy", "Injury"))
+
+Datasource$Pain.loc <- make.factor(Datasource$Pain.loc, levels = seq(1, 8), labels = c("Head/face", "Neck/back", "Upper limb", "Chest", "Abdomen/pelvis", "Hips/buttocks", "Lower limb", "Other/widepread"))
+
+Datasource$Mental.health <- make.factor(Datasource$Mental.health, levels = seq(0, 1), labels = c("Diagnosis", "No diagnosis"))
+
+Datasource$Daily.opioid.intake <- Datasource$Daily.opioid.intake ^ (1/4)
+
+Datasource$Pain.duration <- Datasource$Pain.duration ^ (1/4)
+
+
+Datasource.cfa <- Datasource
+Datasource.cfa$Relationship <- factor(Datasource.cfa$Relationship, levels = c("Single", "In a relation", "Married/De facto", "Civil union", "Divorced/sep.", "Widowed"), labels = c("Other", "Other", "Married/De facto", "Other", "Other", "Other"))
+
+Datasource.cfa$Employment <- factor(Datasource.cfa$Employment, levels = c("Employed", "Unemployed/benefit", "Work at home", "Retired", "Student", "Other"), labels = c("Other", "Unemployed/benefit", "Other", "Other", "Other", "Other"))
+
+Datasource.cfa$Unemployment <- Datasource.cfa$Employment
+
+Datasource.cfa$Mental.health <- relevel(Datasource.cfa$Mental.health, "No diagnosis")
+
+Datasource.cfa$Ethnicity <- factor(Datasource.cfa$Ethnicity, levels = c("European", "Māori", "Pacific", "Asian"), labels = c("Other", "Other", "Pacific", "Other"))
+
+Datasource.cfa$Pain.loc <- factor(Datasource.cfa$Pain.loc, levels = c("Head/face", "Neck/back", "Upper limb", "Chest", "Abdomen/pelvis", "Hips/buttocks", "Lower limb", "Other/widepread", "Missing"), labels = c("Other", "N/B/A/P", "Other", "Other", "N/B/A/P", "Other", "Other", "Other", "Other"))
+
+Datasource.cfa$Depression <- Datasource.cfa$Depression.phq9
+
+Datasource.cfa$Stigma <- Datasource.cfa$Stigma.total
+Datasource.cfa$Social.support <- Datasource.cfa$Support.oss3
+Datasource.cfa$Pain.location <- Datasource.cfa$Pain.loc
+```
+
+\newpage
+
+# Statistical Analysis Plan
+
+A statistical analysis consisting of hierarchical linear regressions is conducted to evaluate the following hypotheses:
+
+1. People with chronic pain such as those who have a co-morbid mental health diagnosis, who use opiates, and who have more medical ("organic") beliefs about pain, experience greater stigma.
+
+2. People with higher stigma have higher pain levels, greater disability, depression, and less social support compared to those reporting less stigma.
+
+For each hypothesis, the analysis is conducted in two steps. In the first step, a linear regression model is constructed which includes all the available demographic and clinical variables. The health of this model is evaluated. If the model assumptions are violated, necessary adjustments are made. In the second step, the variables of interest are also added to the model. The health of the model is re-evaluated and hypothesis tests are conducted. For hypothesis 1, the step 1 independent variables are Age, Gender, Ethnicity, Relationship, Employment, Diagnosis, Pain location and Pain duration. For step 2, additional independent variables are: Organic beliefs, Psychological beliefs, Daily opioid intake and History of mental health. All these variables are discrete except Age, Pain duration,  Daily opioid intake, Organic beliefs and Psychological beliefs. The dependent continuous variable is stigma. For hypothesis 2, four linear regression models are constructed corresponding to the four clinical outcomes: Pain intensity, Disability, Depression and Social support. All these variables are continuous. For each outcome, step I independent variables are: Age, Gender, Ethnicity, Relationship, Employment, Diagnosis, Pain location and Pain duration, Organic beliefs, Psychological beliefs, Daily opioid intake and History of mental health. For each outcome, the remaining outcomes are also included as independent variables so that the interdependence across the outcomes is accounted for. At step 2, Stigma is also added as an independent variable.
+
+The two step hierarchical linear regression allows estimation of the amount of variance explained ($R^2_{adj}$; r-squared adjusted) by all the predictors and the additional variance explained ($\Delta R^2_{adj}$) by the variables of interest. To test whether a specific independent variable explains significant amount of dependent variable variance, a type II analysis of variance (ANOVA) F-test is used. This test considers the variance explained by a specific independent variable by comparing a linear regression model with the specific variable to the model which does not have the specific variable. Both models have all the other step 2 independent variables. Therefore, this test accounts for the variance explained by the correlated independent variables. Statistical significance level is set at 0.05. The health of the regression models is checked by evaluating the normality/homogeneity of variance assumptions for the residuals using histogram, QQ-plot and fitted versus residuals plot. Moreover, multicollinearity is checked with the variance inflation factor which is considered unacceptable if greater than 10 [@mcelreath2018statistical]. Quadratic-root transformation is applied to Daily opioid intake and Pain duration as the original variables are not normally distributed.
+
+An exploratory path analysis is also conducted with the aim of collating the inferences drawn from the hypothesis tests into a single parsimonious model. This model is constructed using structural equation modeling. Variables which have significant associations in the above described linear regressions are included in this model. Moreover, any variables which resulted in better fit statistics were also included. Various plausible directions of relationships amongst the variables are also explored while monitoring the health of the model. The health of the model is evaluated against suggested thresholds for CFI (> 0.9), TLI (> 0.9) and RMSEA (< 0.08) statistics [@van2012checklist].
+
+All the analyses are conducted in R using packages: car, dplyr, lavaan, ggplot2, semPlot and report [@forR; @forCar; @forDplyr; @forLavaan; @forGGPlot; @forSemPlot; @forReport].
+
+\newpage
+
+# Results of Primary Analysis
+
+For Stigma, demographic and clinical variables explain 10% of the variance. Organic beliefs, Psychological beliefs, Use of strong opiates and History of Mental health together explain an additional 14% of the Stigma variance. When considered individually, Organic beliefs (F(1, 184) = 10.84, p = 0.001), Mental health (F(1, 184) = 14.5, p = 0.0002), Daily opioid intake (F(1, 184) = 6.46, p = 0.01) and Employment (F(5, 184) = 2.45, p = 0.04) explain a significant portion of the variance. The corresponding regression coefficients and their 95% confidence intervals suggest that an increase in Organic beliefs predicts an increase (0.018, 95% CI [0.007, 0.029]) in Stigma, not having a mental health diagnosis predicts lower (-0.270, 95% CI [-0.410, -0.130]) levels of Stigma , an increase in opioid intake predicts an increase (0.077, 95% CI [0.017, 0.137]) in Stigma, and being unemployed predicts higher (0.272, 95% CI [0.117, 0.427]) levels of Stigma.
+
+For Pain intensity, demographic and clinical variables together with other outcomes (Disability, Depression and Social support) explain 41.5% of the variance. Addition of stigma as a predictor does not explain any additional variance in Pain intensity. Individually, Ethnicity (F(3, 180) = 3.09, p = 0.03) and Disability (F(1, 180) = 29.41, p = 1.869 x $10^{-7}$) explain significant variance. Model coefficients suggest higher levels of pain intensity for people of Pacific ethnicity (1.88, 95% CI [0.55, 3.21]) and an increase (0.37, 95% CI [0.24, 0.50]) in pain intensity with an increase in Disability.
+
+For Disability, demographic and clinical variables together with other outcomes (Pain intensity, Depression and Social support) explain 59% of the variance.  Stigma explains an additional 3.2% of the variance in Disability. Individually, Relationship (F(4, 180) = 4.8, p = 0.001), Employment (F(5, 180) = 2.4, p = 0.04), Pain location (F(8, 180) = 2.3, p = 0.03), Organic beliefs (F(1, 180) = 4.4, p = 0.04), Daily opioid intake (F(1, 180) = 4.33, p = 0.04), Pain intensity (F(1, 180) = 29.41, p = 1.869 x $10^{-7}$), Depression (F(1, 180) = 18.64, p = 2.604 x $10^{-5}$) and Stigma (F(1, 180) = 16.31, p = 7.94 x $10^{-5}$) explain significant variance in Disability. Model coefficients suggest lower (-0.516, 95% CI [-1.017, -0.015]) levels of Disability for people who are married or in a de facto relationship, higher levels of Disability (1.24, 95% CI [0.15, 2.33]) for people with "Other" employment status, lower levels of Disability for people with pain in Neck/back (-0.8, 95% CI [-1.53, -0.07]) or Abdomen/pelvis (-0.846, 95% CI [-1.63, -0.06]), an increase (0.04, 95% CI [0.002, 0.07]) in Disability with an increase in Organic beliefs, an increase (0.19, 95% CI [0.01, 0.37]) in Disability with an increase in Daily opioid intake, an increase (0.38, 95% CI [0.24, 0.52]) in Disability with an increase in Pain intensity, an increase (0.09, 95% CI [0.05, 0.12]) in Disability with increase in Depression, and an increase (1.05, 95% CI [0.54, 1.56]) in Disability with an increase in Stigma.
+
+For Depression, demographic and clinical variables together with other outcomes (Pain intensity, Disability and Social support) explain 48.7% of the variance.  Stigma explains an additional 4.4% of the variance. Individually, Mental health (F(1, 180) = 6.2, p = 0.01), Disability (F(1, 180) = 18.64, p = 2.604 x $10^{-5}$) and Stigma (F(1, 180) = 17.74, p = 3.999 x $10^{-5}$) explain significant variance in Depression. Model coefficients suggest lower levels of Depression (-1.98, 95% CI [-3.55, -0.41]) for people who do not have a mental health diagnosis, an increase in Depression (1.1, 95% CI [0.6, 1.61]) with an increase in Disability and an increase in Depression (3.92, 95% CI [2.08, 5.75]) with an increase in Stigma.
+
+For Social support, demographic and clinical variables together with other outcomes (Pain intensity, Disability and Depression) explain 11% of the variance.  Stigma explains an additional 6.1% of the variance. Individually, only Stigma (F(1, 180) = 14.29, p = 0.0002) explain significant variance in Social support. Model coefficients suggest a decrease in social support (-1.77, 95% CI [-2.7, -0.85]) with an increase in Stigma.
+
+\newpage
+
+# Results of Exploratory Path Analysis
+
+The exploratory path analysis suggests higher levels of Stigma associated with higher opioid intake, having more Organic pain beliefs, having a mental health history and being unemployed. Higher Stigma itself predicts higher Disability and Depression but lower Social support. Pain intensity is not predicted by any variable in the data. Rather it is a strong predictor of Disability. Higher Pain intensity predicts higher Disability. Higher Disability itself predicts higher Depression.
+
+Being married or having a de facto relationship predicts lower levels of Disability, having more organic beliefs predicts higher Disability and having neck/back/abdomen/pelvis pain predicts lower Disability compared to upper limb/chest/hips/lower limb/widespread pain. Having a mental health history predicts higher Depression. Some of the relationships which stand out in the hierarchical linear regression analysis are removed from the model as their presence results in poor model fit statistics. Changing the presented direction of relationship amongst the variables also results in poor fit statistics. The fit statistics for the presented model are CFI = 0.95, TLI = 0.93 and RMSEA = 0.067 90% CI [0.036, 0.097].
+
+These results are illustrated in the following figure where the direction and width of the arrows represent the direction and strength of relationship between the variables. Red arrows represent a decrease in the consequent variable with an increase in the antecedent variable. Green arrows represent an increase in the consequent variable with an increase in the antecedent variable.
+
+```{r path_model_figure, echo=FALSE, include=TRUE, warning=F, comment=NA}
+Model <- '
+Stigma            ~ Unemployment + Daily.opioid.intake + Mental.health + Beliefs.organic
+Social.support    ~ Stigma
+Disability        ~ Relationship + Beliefs.organic + Stigma + Pain.location + Pain.intensity
+Depression        ~ Mental.health + Stigma + Disability
+Depression        ~~ 0*Social.support
+'
+Model.fit <- cfa(Model, data = Datasource.cfa)
+semPaths(Model.fit, "std", layout = "tree2", residuals = F, intercepts = F, fade = T,
+         exoCov = F, springLevels = F, whatLabels = "no", exoVar = F, rotation = 2,
+         sizeMan = 16, sizeMan2 = 6, shapeMan = "rectangle", label.cex = 1.2, nCharNodes = 0)
+```
+
+\newpage
+
+# Hypothesis I
+
+## Step I: Stigma and demographic/clinical variables
+
+### Model Setup
+
+```{r stageIstepI, echo=TRUE, include=TRUE, warning=F}
+Model.stageI.stepI <- lm(Stigma.total ~ Age + Gender + Ethnicity +
+                           Relationship + Employment +
+                           Diagnosis + Pain.loc + Pain.duration,
+                         data = Datasource)
+```
+
+### Diagnostics
+
+Residuals plot.
+
+```{r stageIstepIdiag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageI.stepI)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIstepIvif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageI.stepI))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+High and moderate variance inflation factor is indicated for Diagnosis and Pain location, respectively. Plotting these factors against each other reveals the underlying clustering of participants across them. If pain locations(s) is known, one can predict the Diagnosis thus eliminating the need for inclusion of Diagnosis in the model.
+
+```{r stageIstepIvifcluster, echo=FALSE, include=TRUE, warning=F}
+gg<-Plot.factor.vs.factor(Datasource, 'Diagnosis', 'Pain.loc') + theme(axis.text.x = element_text(angle = 90))
+gg
+```
+
+### Reduced Model Setup
+
+```{r stageIstepIreduced, echo=TRUE, include=TRUE, warning=F}
+Model.stageI.stepI <- lm(Stigma.total ~ Age + Gender + Ethnicity +
+                           Relationship + Employment +
+                           Pain.loc + Pain.duration,
+                         data = Datasource)
+```
+
+### Diagnostics
+
+Residuals plot.
+
+```{r stageIstepIreduceddiag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageI.stepI)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIstepIvifreduced, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageI.stepI))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (<5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+### Fit Statistics
+
+```{r stageIstepIreducedsummary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageI.stepI), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+df <- df[seq(nrow(df)-3, nrow(df)), c(1, 6)]
+row.names(df) <- NULL
+head(df, n=10L)
+```
+
+## Step II: Explaining stigma with pain beliefs, ...
+
+### Model Setup
+
+```{r stageIstepII, echo=TRUE, include=TRUE, warning=F}
+Model.stageI.stepII <- lm(Stigma.total ~ Age + Gender + Ethnicity +
+                            Relationship + Employment +
+                            Pain.loc + Pain.duration +
+                            Beliefs.organic + Beliefs.psych +
+                            Daily.opioid.intake + Mental.health,
+                          data = Datasource)
+```
+
+### Diagnostics
+
+Residuals plot.
+
+```{r stageIstepIIdiag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageI.stepII)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIstepIIvif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageI.stepII))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+### Model Summary
+
+```{r stageIstepIIreducedsummary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageI.stepII), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+head(df, n=100L)
+```
+
+## Hypothesis Tests
+
+```{r stageIstepIIreducedhypth, echo=FALSE, include=TRUE, warning=F, comment=NA}
+head(Anova(Model.stageI.stepII), n=50L)
+```
+
+\newpage
+
+# Hypothesis II
+
+## Pain Intensity
+
+### Step I: Pain intensity and demographic/clinical variables
+
+#### Model Setup
+
+```{r stageIIstepI_pi, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.pain.stepI <- lm(Pain.intensity ~ Age + Gender + Ethnicity +
+                                 Relationship + Employment +
+                                 Pain.loc + Pain.duration +
+                                 Beliefs.organic + Beliefs.psych +
+                                 Daily.opioid.intake + Mental.health +
+                                 Disability + Depression.phq9 + Support.oss3,
+                               data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepI_pi_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.pain.stepI)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepI_pi_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.pain.stepI))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Fit Statistics
+
+```{r stageIIstepI_pi_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.pain.stepI), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+df <- df[seq(nrow(df)-3, nrow(df)), c(1, 6)]
+head(df, n=10L)
+```
+
+### Step II: Explaining pain intensity with stigma
+
+#### Model Setup
+
+```{r stageIIstepII_pi, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.pain.stepII <- lm(Pain.intensity ~ Age + Gender + Ethnicity +
+                                  Relationship + Employment +
+                                  Pain.loc + Pain.duration +
+                                  Beliefs.organic + Beliefs.psych +
+                                  Daily.opioid.intake + Mental.health +
+                                  Disability + Depression.phq9 + Support.oss3 +
+                                  Stigma.total,
+                                data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepII_pi_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.pain.stepII)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepII_pi_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.pain.stepII))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Model Summary
+
+```{r stageIIstepII_pi_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.pain.stepII), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+head(df, n=100L)
+```
+
+### Hypothesis Tests
+
+```{r stageIIstepII_pi_hypth, echo=FALSE, include=TRUE, warning=F, comment=NA}
+head(Anova(Model.stageII.pain.stepII), n=50L)
+```
+
+## Disability
+
+### Step I: Disability and demographic/clinical variables
+
+#### Model Setup
+
+```{r stageIIstepI_dis, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.dis.stepI <- lm(Disability ~ Age + Gender + Ethnicity +
+                                Relationship + Employment +
+                                Pain.loc + Pain.duration +
+                                Beliefs.organic + Beliefs.psych +
+                                Daily.opioid.intake + Mental.health +
+                                Pain.intensity + Depression.phq9 + Support.oss3,
+                              data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepI_dis_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.dis.stepI)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepI_dis_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.dis.stepI))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Fit Statistics
+
+```{r stageIIstepI_dis_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.dis.stepI), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+df <- df[seq(nrow(df)-3, nrow(df)), c(1, 6)]
+head(df, n=10L)
+```
+
+### Step II: Explaining disability with stigma
+
+#### Model Setup
+
+```{r stageIIstepII_dis, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.dis.stepII <- lm(Disability ~ Age + Gender + Ethnicity +
+                                 Relationship + Employment +
+                                 Pain.loc + Pain.duration +
+                                 Beliefs.organic + Beliefs.psych +
+                                 Daily.opioid.intake + Mental.health +
+                                 Pain.intensity + Depression.phq9 + Support.oss3 +
+                                 Stigma.total,
+                               data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepII_dis_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.dis.stepII)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepII_dis_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.dis.stepII))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Model Summary
+
+```{r stageIIstepII_dis_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.dis.stepII), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+head(df, n=100L)
+```
+
+### Hypothesis Tests
+
+```{r stageIIstepII_dis_hypth, echo=FALSE, include=TRUE, warning=F, comment=NA}
+head(Anova(Model.stageII.dis.stepII), n=50L)
+```
+
+
+## Depression
+
+### Step I: Depression and demographic/clinical variables
+
+#### Model Setup
+
+```{r stageIIstepI_dep, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.dep.stepI <- lm(Depression.phq9 ~ Age + Gender + Ethnicity +
+                                Relationship + Employment +
+                                Pain.loc + Pain.duration +
+                                Beliefs.organic + Beliefs.psych +
+                                Daily.opioid.intake + Mental.health +
+                                Pain.intensity + Disability + Support.oss3,
+                              data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepI_dep_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.dep.stepI)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepI_dep_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.dep.stepI))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Fit Statistics
+
+```{r stageIIstepI_dep_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.dep.stepI), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+df <- df[seq(nrow(df)-3, nrow(df)), c(1, 6)]
+head(df, n=10L)
+```
+
+### Step II: Explaining depression with stigma
+
+#### Model Setup
+
+```{r stageIIstepII_dep, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.dep.stepII <- lm(Depression.phq9 ~ Age + Gender + Ethnicity +
+                                 Relationship + Employment +
+                                 Pain.loc + Pain.duration +
+                                 Beliefs.organic + Beliefs.psych +
+                                 Daily.opioid.intake + Mental.health +
+                                 Pain.intensity + Disability + Support.oss3 +
+                                 Stigma.total,
+                               data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepII_dep_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.dep.stepII)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepII_dep_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.dep.stepII))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Model Summary
+
+```{r stageIIstepII_dep_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.dep.stepII), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+head(df, n=100L)
+```
+
+### Hypothesis Tests
+
+```{r stageIIstepII_dep_hypth, echo=FALSE, include=TRUE, warning=F, comment=NA}
+head(Anova(Model.stageII.dep.stepII), n=50L)
+```
+
+## Support
+
+### Step I: Support and demographic/clinical variables
+
+#### Model Setup
+
+```{r stageIIstepI_sup, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.sup.stepI <- lm(Support.oss3 ~ Age + Gender + Ethnicity +
+                                Relationship + Employment +
+                                Pain.loc + Pain.duration +
+                                Beliefs.organic + Beliefs.psych +
+                                Daily.opioid.intake + Mental.health +
+                                Pain.intensity + Disability + Depression.phq9,
+                              data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepI_sup_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.sup.stepI)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepI_sup_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.sup.stepI))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Fit Statistics
+
+```{r stageIIstepI_sup_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.sup.stepI), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+df <- df[seq(nrow(df)-3, nrow(df)), c(1, 6)]
+head(df, n=10L)
+```
+
+### Step II: Explaining support with stigma
+
+#### Model Setup
+
+```{r stageIIstepII_sup, echo=TRUE, include=TRUE, warning=F}
+Model.stageII.sup.stepII <- lm(Support.oss3 ~ Age + Gender + Ethnicity +
+                                 Relationship + Employment +
+                                 Pain.loc + Pain.duration +
+                                 Beliefs.organic + Beliefs.psych +
+                                 Daily.opioid.intake + Mental.health +
+                                 Pain.intensity + Disability + Depression.phq9 +
+                                 Stigma.total,
+                               data = Datasource)
+```
+
+#### Diagnostics
+
+Residuals plot.
+
+```{r stageIIstepII_sup_diag, echo=FALSE, include=TRUE, warning=F}
+gDiag<-diag.plot.lmer(Model.stageII.sup.stepII)
+gDiag
+```
+
+Multicollinearity statistics.
+
+```{r stageIIstepII_sup_vif, echo=FALSE, include=TRUE, warning=F, render=lemon_print}
+df<-as.data.frame(performance::check_collinearity(Model.stageII.sup.stepII))
+df <- df[, -c(3)]
+df$Label <- sapply(df$VIF, function(x) {if(x<5){"Low (< 5)"}else if(x<10){"Moderate"}else{"High (> 10)"}})
+head(df, n=50L)
+```
+
+#### Model Summary
+
+```{r stageIIstepII_sup_summary, echo=FALSE, include=TRUE, warning=F, comment=NA, render=lemon_print}
+df <- as.report_table(report(Model.stageII.sup.stepII), summary = T)
+df <- df[, -c(3, 6, 7, 8)]
+rownames(df) <- NULL
+names(df) <- c("Parameter", "Coefficient", "CI (low)", "CI (high)", "Std. Coefficient", "Fit")
+df[, seq(2, 6)] <- round(df[, seq(2, 6)], 3)
+head(df, n=100L)
+```
+
+### Hypothesis Tests
+
+```{r stageIIstepII_sup_hypth, echo=FALSE, include=TRUE, warning=F, comment=NA}
+head(Anova(Model.stageII.sup.stepII), n=50L)
+```
+
+\newpage
+
+# Exploratory Path Analysis
+
+## Model Setup
+
+```{r path_model, echo=TRUE, include=TRUE, warning=F, comment=NA}
+Model <- '
+Stigma            ~ Unemployment + Daily.opioid.intake + Mental.health + Beliefs.organic
+Social.support    ~ Stigma
+Disability        ~ Relationship + Beliefs.organic + Stigma + Pain.location + Pain.intensity
+Depression        ~ Mental.health + Stigma + Disability
+Depression        ~~ 0*Social.support
+'
+```
+
+## Model Diagram
+
+```{r path_model_fit, echo=FALSE, include=TRUE, warning=F, comment=NA}
+Model.fit <- cfa(Model, data = Datasource.cfa)
+semPaths(Model.fit, "std", layout = "tree2", residuals = F, intercepts = F, fade = T,
+         exoCov = F, springLevels = F, whatLabels = "no", exoVar = F, rotation = 2,
+         sizeMan = 16, sizeMan2 = 6, shapeMan = "rectangle", label.cex = 1.2, nCharNodes = 0)
+```
+
+## Model Summary
+
+```{r path_model_summary, echo=FALSE, include=TRUE, warning=F, comment=NA}
+summary(Model.fit, fit = T, standardized=T,rsquare=T)
+```
+
+# References
